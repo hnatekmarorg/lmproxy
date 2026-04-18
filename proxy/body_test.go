@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/hnatekmarorg/lmproxy/config"
@@ -13,7 +14,7 @@ import (
 func TestPrepareRequestBody_NoMerge(t *testing.T) {
 	req := httptest.NewRequest("POST", "/test", bytes.NewBuffer([]byte(`{"key":"value"}`)))
 
-	body, err := prepareRequestBody(req, nil, "/v1/chat/completions")
+	body, err := prepareRequestBody(req, nil, "/v1/chat/completions", 0) // 0 = no limit
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -34,7 +35,7 @@ func TestPrepareRequestBody_MergeBody(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/test", bytes.NewBuffer([]byte(`{"messages":[{"role":"user","content":"test"}]}`)))
 
-	body, err := prepareRequestBody(req, modelConfig, "/v1/chat/completions")
+	body, err := prepareRequestBody(req, modelConfig, "/v1/chat/completions", 10*1024*1024) // 10MB limit
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -57,7 +58,7 @@ func TestPrepareRequestBody_NotInferenceEndpoint(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/test", bytes.NewBuffer([]byte(`{"key":"value"}`)))
 
-	body, err := prepareRequestBody(req, modelConfig, "/v1/models")
+	body, err := prepareRequestBody(req, modelConfig, "/v1/models", 10*1024*1024) // 10MB limit
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -75,12 +76,54 @@ func TestPrepareRequestBody_GETRequest(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/test", nil)
 
-	body, err := prepareRequestBody(req, modelConfig, "/v1/chat/completions")
+	body, err := prepareRequestBody(req, modelConfig, "/v1/chat/completions", 10*1024*1024) // 10MB limit
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	if body != req.Body {
 		t.Errorf("Expected body to be unchanged for GET request")
+	}
+}
+
+func TestPrepareRequestBody_RequestBodySizeLimit(t *testing.T) {
+	modelConfig := &config.ModelConfig{
+		Body: map[string]interface{}{"temperature": 0.7},
+	}
+
+	// Create a body larger than the 1KB limit
+	largeBody := make([]byte, 2*1024) // 2KB
+	for i := range largeBody {
+		largeBody[i] = 'x'
+	}
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewBuffer(largeBody))
+
+	// 1KB limit should cause error
+	_, err := prepareRequestBody(req, modelConfig, "/v1/chat/completions", 1024)
+	if err == nil {
+		t.Fatal("Expected error for body exceeding limit, got nil")
+	}
+	if !strings.Contains(err.Error(), "request entity too large") && !strings.Contains(err.Error(), "MaxBytes") {
+		t.Logf("Note: Error message: %v", err)
+	}
+}
+
+func TestPrepareRequestBody_NoLimitForPassThrough(t *testing.T) {
+	// When no merge is needed, body should pass through without limit
+	largeBody := make([]byte, 2*1024) // 2KB
+	for i := range largeBody {
+		largeBody[i] = 'x'
+	}
+
+	req := httptest.NewRequest("POST", "/test", bytes.NewBuffer(largeBody))
+
+	// 1KB limit but no merge needed - should pass through
+	body, err := prepareRequestBody(req, nil, "/v1/chat/completions", 1024)
+	if err != nil {
+		t.Fatalf("Expected no error for pass-through, got %v", err)
+	}
+	if body != req.Body {
+		t.Errorf("Expected body to pass through unchanged")
 	}
 }

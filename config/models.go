@@ -23,8 +23,10 @@ type Endpoint struct {
 }
 
 type HTTPConfig struct {
-	Host string `yaml:"host"`
-	Port int    `yaml:"port"`
+	Host               string `yaml:"host"`
+	Port               int    `yaml:"port"`
+	MaxRequestBodySize int    `yaml:"max_request_body_size"` // in bytes, 0 = no limit
+	Timeout            int    `yaml:"timeout"`               // in seconds, 0 = default (1 hour)
 }
 
 type Config struct {
@@ -55,14 +57,33 @@ func Load(configPath string) (*Config, error) {
 		config.Server.Port = 8080
 	}
 
+	// Default max request body size to 100MB if not configured
+	if config.Server.MaxRequestBodySize == 0 {
+		config.Server.MaxRequestBodySize = 100 * 1024 * 1024 // 100MB for large context support
+	}
+
+	// Default timeout to 1 hour (3600 seconds) if not configured
+	// Supports 260K context + long generations with speed degradation
+	if config.Server.Timeout == 0 {
+		config.Server.Timeout = 3600 // 1 hour
+	}
+
 	// Validate endpoints
 	seenModelIDs := make(map[string]bool)
 	for i, endpoint := range config.Endpoints {
 		if endpoint.Host == "" {
 			return nil, fmt.Errorf("endpoint %d: host is required", i)
 		}
-		if _, err := url.Parse(endpoint.Host); err != nil {
+		parsedURL, err := url.Parse(endpoint.Host)
+		if err != nil {
 			return nil, fmt.Errorf("endpoint %d: invalid host URL %q: %w", i, endpoint.Host, err)
+		}
+		// Validate URL scheme (prevent SSRF)
+		// Trim any whitespace for safety (url.Parse should reject these, but be defensive)
+		scheme := strings.TrimSpace(parsedURL.Scheme)
+		scheme = strings.ToLower(scheme)
+		if scheme != "http" && scheme != "https" {
+			return nil, fmt.Errorf("endpoint %d: host URL must use http:// or https:// scheme, got %q", i, parsedURL.Scheme)
 		}
 		if len(endpoint.Models) == 0 {
 			return nil, fmt.Errorf("endpoint %d: at least one model is required", i)

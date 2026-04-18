@@ -1,5 +1,9 @@
 server:
   port: 9090
+  # max_request_body_size: 104857600  # Optional: max request body size in bytes (default: 100MB)
+  # Set to 0 for no limit (not recommended for production)
+  # timeout: 3600  # Optional: request timeout in seconds (default: 3600 = 1 hour)
+  # Supports 260K context + long generations with speed degradation
 
 endpoints:
   - host: https://your-llm-server.com

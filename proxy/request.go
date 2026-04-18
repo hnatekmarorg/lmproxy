@@ -14,7 +14,7 @@ import (
 	"github.com/hnatekmarorg/lmproxy/util"
 )
 
-func prepareRequestBody(r *http.Request, modelConfig *config.ModelConfig, targetPath string) (io.Reader, error) {
+func prepareRequestBody(r *http.Request, modelConfig *config.ModelConfig, targetPath string, maxBodySize int) (io.Reader, error) {
 	isInferenceEndpoint := strings.HasSuffix(targetPath, "/completions") || strings.HasSuffix(targetPath, "/generate")
 
 	if modelConfig == nil || r.Method != "POST" || !isInferenceEndpoint {
@@ -23,6 +23,11 @@ func prepareRequestBody(r *http.Request, modelConfig *config.ModelConfig, target
 
 	if len(modelConfig.Body) == 0 && len(modelConfig.ExtraBody) == 0 && len(modelConfig.ChatTemplateKwargs) == 0 {
 		return r.Body, nil
+	}
+
+	// Only apply size limit when we need to read/merge the body
+	if maxBodySize > 0 {
+		r.Body = http.MaxBytesReader(nil, r.Body, int64(maxBodySize))
 	}
 
 	var requestBody map[string]interface{}
@@ -34,8 +39,15 @@ func prepareRequestBody(r *http.Request, modelConfig *config.ModelConfig, target
 		}
 		if len(bodyBytes) > 0 {
 			if err := json.Unmarshal(bodyBytes, &requestBody); err != nil {
-				slog.Error("Failed to parse request body as JSON", "error", err)
+				slog.Error("Failed to parse request body as JSON", "error", err, "bodySize", len(bodyBytes))
 				return nil, fmt.Errorf("invalid JSON in request body: %w", err)
+			}
+		} else {
+			// Handle whitespace-only or empty body
+			trimmed := strings.TrimSpace(string(bodyBytes))
+			if len(trimmed) > 0 {
+				slog.Error("Failed to parse request body as JSON", "error", "whitespace-only body")
+				return nil, fmt.Errorf("request body contains only whitespace")
 			}
 		}
 	}

@@ -3,19 +3,25 @@ package proxy
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/hnatekmarorg/lmproxy/config"
 )
 
 type Proxy struct {
-	endpoints []config.Endpoint
-	client    *http.Client
+	endpoints          []config.Endpoint
+	client             *http.Client
+	maxRequestBodySize int
+	timeout            time.Duration
 }
 
 func NewProxy(cfg *config.Config) *Proxy {
+	timeout := time.Duration(cfg.Server.Timeout) * time.Second
 	return &Proxy{
-		endpoints: cfg.Endpoints,
-		client:    &http.Client{Timeout: 0},
+		endpoints:          cfg.Endpoints,
+		client:             &http.Client{Timeout: timeout},
+		maxRequestBodySize: cfg.Server.MaxRequestBodySize,
+		timeout:            timeout,
 	}
 }
 
@@ -30,9 +36,10 @@ func (p *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
 	targetURL.Path = targetPath
 	targetURL.RawQuery = r.URL.RawQuery
 
-	body, err := prepareRequestBody(r, modelConfig, targetPath)
+	body, err := prepareRequestBody(r, modelConfig, targetPath, p.maxRequestBodySize)
 	if err != nil {
-		if strings.Contains(err.Error(), "invalid JSON") {
+		// Check for JSON parsing errors (syntax errors, not "invalid JSON" string)
+		if strings.Contains(err.Error(), "invalid character") || strings.Contains(err.Error(), "json:") {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		} else {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
