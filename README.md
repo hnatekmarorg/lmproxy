@@ -4,31 +4,52 @@
 [![Version](https://img.shields.io/badge/version-1.0.0-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
-> **A lightweight HTTP proxy that unifies multiple LLM backends under a single API surface.**
+> **Shift the burden of sampling parameters from clients to the proxy server.**
 
 ## Why This Exists
 
-Managing multiple LLM endpoints is painful. You might have:
+**The problem:** Every client request needs to specify sampling parameters like `temperature`, `top_p`, `top_k`, `max_tokens`, etc. This creates:
 
-- Different models for different tasks (coding vs. chat vs. analysis)
-- Multiple backend servers for load balancing or redundancy
-- Model-specific parameters you repeat in every request
-- Clients that need a single, consistent API endpoint
+- **Repetition** - Same parameters sent in every request
+- **Drift** - Different clients using different defaults
+- **Maintenance burden** - Changing a parameter means updating all clients
+- **Leaky abstraction** - Clients need to know model-specific details
 
-Building a proxy that handles all of this is boilerplate work. This project exists so you don't have to.
+**The solution:** Define sampling parameters once in the proxy configuration. Clients send clean, simple requests. The proxy injects the right parameters based on which model they're using.
+
+```yaml
+# Server-side configuration (defined once)
+models:
+  - id: coding-model
+    path: /coding
+    body:
+      temperature: 0.1      # Focused, deterministic
+      top_p: 0.95
+      top_k: 40
+      max_tokens: 8192
+```
+
+```bash
+# Client request (no params needed)
+curl -X POST http://proxy/coding/v1/chat/completions \
+  -d '{"messages": [...]}'
+
+# Proxy automatically adds:
+# {"temperature": 0.1, "top_p": 0.95, "top_k": 40, "max_tokens": 8192, ...}
+```
 
 ## What Makes It Different
 
 | Feature | Typical Proxy | LLM Proxy |
 |---------|--------------|-----------|
-| **Model routing** | Path-based only | Path + model-aware routing |
-| **Default parameters** | None (client must specify every time) | Per-model defaults (temperature, top_p, etc.) |
+| **Sampling params** | Client must specify every time | Defined once in server config |
+| **Default parameters** | None | Per-model defaults (temperature, top_p, etc.) |
 | **Request merging** | Pass-through only | Auto-merges config + client request |
 | **Configuration** | Hard-coded or env vars | YAML-based, human-readable |
 | **SSE streaming** | Often broken or requires workarounds | First-class support, works out of the box |
 | **Setup time** | Hours of coding | 5 minutes (build + config + run) |
 
-**The key difference:** This isn't just a request forwarder. It's a **configuration layer** that sits between your clients and your LLM backends, handling the complexity of model routing, parameter defaults, and request merging automatically.
+**The key difference:** This isn't just a request forwarder. It's a **parameter management layer** that centralizes model configuration, so clients don't need to know about temperature, top_p, or any other sampling details.
 
 ## Features
 
