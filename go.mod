@@ -1,4 +1,4 @@
-module lm-proxy
+module github.com/hnatekmarorg/lmproxy
 
 go 1.26.2
 

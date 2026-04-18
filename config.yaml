@@ -1,3 +1,6 @@
+server:
+  port: 9090
+
 endpoints:
   - host: https://sota.hnatekmar.dev
     models:
