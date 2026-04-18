@@ -1,4 +1,4 @@
-# LM Proxy
+# LLM Proxy
 
 A lightweight HTTP proxy server for routing requests to multiple LLM endpoints with configurable model parameters.
 
@@ -14,13 +14,13 @@ A lightweight HTTP proxy server for routing requests to multiple LLM endpoints w
 
 ```bash
 # Build from source
-go build -o lmproxy main.go
+go build -o llmproxy main.go
 ```
 
 ## Usage
 
 ```bash
-./lmproxy config.yaml
+./llmproxy config.yaml
 ```
 
 The proxy requires a configuration file path as a command-line argument.
@@ -115,7 +115,7 @@ If no specific path is provided in the request, the proxy defaults to `/v1/chat/
 ├── util/
 │   └── util.go       # Utility functions
 ├── config.yaml       # Example configuration
-└── lmproxy           # Compiled binary
+└── llmproxy          # Compiled binary
 ```
 
 ## License
