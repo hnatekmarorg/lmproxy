@@ -47,7 +47,7 @@ func TestResolveTargetURL(t *testing.T) {
 	}
 
 	// Test with matching path
-	endpoint, modelConfig, targetURL := p.resolveTargetURL(&url.URL{Path: "/test/v1/chat"})
+	endpoint, modelConfig, targetURL := p.resolveTargetURL(&url.URL{Path: "/test/v1/chat"}, "test-request-id")
 	if endpoint == nil || modelConfig == nil || targetURL == nil {
 		t.Fatal("Expected endpoint, modelConfig, and URL")
 	}
@@ -62,7 +62,7 @@ func TestResolveTargetURL(t *testing.T) {
 func TestResolveTargetURL_EmptyEndpoints(t *testing.T) {
 	p := &Proxy{}
 
-	endpoint, modelConfig, targetURL := p.resolveTargetURL(&url.URL{})
+	endpoint, modelConfig, targetURL := p.resolveTargetURL(&url.URL{}, "test-request-id")
 	if endpoint != nil || modelConfig != nil || targetURL != nil {
 		t.Errorf("Expected nil for empty endpoints, got endpoint=%v, modelConfig=%v, URL=%v", endpoint, modelConfig, targetURL)
 	}
@@ -87,7 +87,7 @@ func TestResolveTargetURL_MultipleEndpoints(t *testing.T) {
 	}
 
 	// Test routing to first endpoint
-	endpoint, modelConfig, targetURL := p.resolveTargetURL(&url.URL{Path: "/fast/v1/chat"})
+	endpoint, modelConfig, targetURL := p.resolveTargetURL(&url.URL{Path: "/fast/v1/chat"}, "test-request-id")
 	if endpoint == nil || modelConfig == nil || targetURL == nil {
 		t.Fatal("Expected endpoint, modelConfig, and URL for /fast path")
 	}
@@ -99,7 +99,7 @@ func TestResolveTargetURL_MultipleEndpoints(t *testing.T) {
 	}
 
 	// Test routing to second endpoint
-	endpoint, modelConfig, targetURL = p.resolveTargetURL(&url.URL{Path: "/thinking/v1/chat"})
+	endpoint, modelConfig, targetURL = p.resolveTargetURL(&url.URL{Path: "/thinking/v1/chat"}, "test-request-id")
 	if endpoint == nil || modelConfig == nil || targetURL == nil {
 		t.Fatal("Expected endpoint, modelConfig, and URL for /thinking path")
 	}
@@ -111,7 +111,7 @@ func TestResolveTargetURL_MultipleEndpoints(t *testing.T) {
 	}
 
 	// Test no matching path
-	endpoint, modelConfig, targetURL = p.resolveTargetURL(&url.URL{Path: "/unknown"})
+	endpoint, modelConfig, targetURL = p.resolveTargetURL(&url.URL{Path: "/unknown"}, "test-request-id")
 	if endpoint != nil || modelConfig != nil || targetURL != nil {
 		t.Error("Expected nil for unknown path")
 	}

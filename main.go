@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,6 +30,20 @@ func main() {
 		slog.Error("Couldn't load config", "error", err)
 		os.Exit(1)
 	}
+
+	// Configure slog logger
+	var handler slog.Handler
+	switch strings.ToLower(cfg.Logging.Format) {
+	case "json":
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: parseLogLevel(cfg.Logging.Level),
+		})
+	default:
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: parseLogLevel(cfg.Logging.Level),
+		})
+	}
+	slog.SetDefault(slog.New(handler))
 
 	proxyServer := proxy.NewProxy(cfg)
 	mux := http.NewServeMux()
@@ -60,5 +75,20 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("Server error", "error", err)
 		os.Exit(1)
+	}
+}
+
+func parseLogLevel(level string) slog.Level {
+	switch strings.ToLower(level) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
 	}
 }

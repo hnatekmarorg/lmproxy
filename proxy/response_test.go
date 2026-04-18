@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 type mockFlusher struct {
@@ -28,7 +29,7 @@ func TestForwardResponseBody_NonSSE(t *testing.T) {
 		Body:       body,
 	}
 
-	forwardResponseBody(recorder, resp)
+	forwardResponseBody(recorder, resp, "test-request-id", time.Now())
 
 	if recorder.Body.String() != "test response" {
 		t.Errorf("Expected 'test response', got %q", recorder.Body.String())
@@ -45,7 +46,7 @@ func TestForwardResponseBody_SSE(t *testing.T) {
 		Body:       body,
 	}
 
-	forwardResponseBody(recorder, resp)
+	forwardResponseBody(recorder, resp, "test-request-id", time.Now())
 
 	if !strings.Contains(recorder.Body.String(), "event: data") {
 		t.Errorf("Expected SSE content, got %q", recorder.Body.String())

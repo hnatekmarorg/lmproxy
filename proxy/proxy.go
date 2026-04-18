@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -26,9 +27,15 @@ func NewProxy(cfg *config.Config) *Proxy {
 }
 
 func (p *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
-	_, modelConfig, targetURL := p.resolveTargetURL(r.URL)
+	requestID := generateRequestID()
+	startTime := time.Now()
+
+	slog.Info("Request received", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
+
+	_, modelConfig, targetURL := p.resolveTargetURL(r.URL, requestID)
 	if targetURL == nil {
 		http.Error(w, "Not Found", http.StatusNotFound)
+		slog.Info("Request completed", "request_id", requestID, "status", http.StatusNotFound, "duration_ms", time.Since(startTime).Milliseconds(), "response_size", 0)
 		return
 	}
 
@@ -36,20 +43,24 @@ func (p *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
 	targetURL.Path = targetPath
 	targetURL.RawQuery = r.URL.RawQuery
 
-	body, err := prepareRequestBody(r, modelConfig, targetPath, p.maxRequestBodySize)
+	slog.Debug("Forwarding request to backend", "request_id", requestID, "target_url", targetURL.String(), "method", r.Method)
+
+	body, err := prepareRequestBody(r, modelConfig, targetPath, p.maxRequestBodySize, requestID)
 	if err != nil {
 		// Check for JSON parsing errors (syntax errors, not "invalid JSON" string)
+		status := http.StatusInternalServerError
 		if strings.Contains(err.Error(), "invalid character") || strings.Contains(err.Error(), "json:") {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			status = http.StatusBadRequest
 		}
+		http.Error(w, err.Error(), status)
+		slog.Info("Request completed", "request_id", requestID, "status", status, "duration_ms", time.Since(startTime).Milliseconds(), "response_size", 0, "error", err.Error())
 		return
 	}
 
 	proxyReq, err := buildProxyRequest(r, targetURL, body)
 	if err != nil {
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		slog.Info("Request completed", "request_id", requestID, "status", http.StatusBadGateway, "duration_ms", time.Since(startTime).Milliseconds(), "response_size", 0, "error", err.Error())
 		return
 	}
 
@@ -58,6 +69,7 @@ func (p *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
 	resp, err := p.client.Do(proxyReq)
 	if err != nil {
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		slog.Info("Request completed", "request_id", requestID, "status", http.StatusBadGateway, "duration_ms", time.Since(startTime).Milliseconds(), "response_size", 0, "error", err.Error())
 		return
 	}
 	defer resp.Body.Close()
@@ -65,5 +77,6 @@ func (p *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 
-	forwardResponseBody(w, resp)
+	responseSize := forwardResponseBody(w, resp, requestID, startTime)
+	slog.Info("Request completed", "request_id", requestID, "status", resp.StatusCode, "duration_ms", time.Since(startTime).Milliseconds(), "response_size", responseSize)
 }

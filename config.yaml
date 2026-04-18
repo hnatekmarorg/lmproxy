@@ -5,6 +5,10 @@ server:
   # timeout: 3600  # Optional: request timeout in seconds (default: 3600 = 1 hour)
   # Supports 260K context + long generations with speed degradation
 
+logging:
+  level: info  # debug, info, warn, error
+  format: text # text or json
+
 endpoints:
   - host: https://your-llm-server.com
     models:

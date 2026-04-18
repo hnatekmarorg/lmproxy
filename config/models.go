@@ -22,16 +22,22 @@ type Endpoint struct {
 	Models []ModelConfig `yaml:"models"`
 }
 
+type LoggingConfig struct {
+	Level  string `yaml:"level"`
+	Format string `yaml:"format"`
+}
+
 type HTTPConfig struct {
 	Host               string `yaml:"host"`
 	Port               int    `yaml:"port"`
-	MaxRequestBodySize int    `yaml:"max_request_body_size"` // in bytes, 0 = no limit
-	Timeout            int    `yaml:"timeout"`               // in seconds, 0 = default (1 hour)
+	MaxRequestBodySize int    `yaml:"max_request_body_size"`
+	Timeout            int    `yaml:"timeout"`
 }
 
 type Config struct {
-	Server    HTTPConfig `yaml:"server"`
-	Endpoints []Endpoint `yaml:"endpoints"`
+	Server    HTTPConfig   `yaml:"server"`
+	Logging   LoggingConfig `yaml:"logging"`
+	Endpoints []Endpoint   `yaml:"endpoints"`
 }
 
 func Load(configPath string) (*Config, error) {
@@ -57,15 +63,20 @@ func Load(configPath string) (*Config, error) {
 		config.Server.Port = 8080
 	}
 
-	// Default max request body size to 100MB if not configured
 	if config.Server.MaxRequestBodySize == 0 {
-		config.Server.MaxRequestBodySize = 100 * 1024 * 1024 // 100MB for large context support
+		config.Server.MaxRequestBodySize = 100 * 1024 * 1024
 	}
 
-	// Default timeout to 1 hour (3600 seconds) if not configured
-	// Supports 260K context + long generations with speed degradation
 	if config.Server.Timeout == 0 {
-		config.Server.Timeout = 3600 // 1 hour
+		config.Server.Timeout = 3600
+	}
+
+	// Default logging config
+	if config.Logging.Level == "" {
+		config.Logging.Level = "info"
+	}
+	if config.Logging.Format == "" {
+		config.Logging.Format = "text"
 	}
 
 	// Validate endpoints
@@ -78,10 +89,7 @@ func Load(configPath string) (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("endpoint %d: invalid host URL %q: %w", i, endpoint.Host, err)
 		}
-		// Validate URL scheme (prevent SSRF)
-		// Trim any whitespace for safety (url.Parse should reject these, but be defensive)
-		scheme := strings.TrimSpace(parsedURL.Scheme)
-		scheme = strings.ToLower(scheme)
+		scheme := strings.ToLower(parsedURL.Scheme)
 		if scheme != "http" && scheme != "https" {
 			return nil, fmt.Errorf("endpoint %d: host URL must use http:// or https:// scheme, got %q", i, parsedURL.Scheme)
 		}
