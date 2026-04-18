@@ -20,13 +20,11 @@ func NewProxy(cfg *config.Config) *Proxy {
 }
 
 func (p *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
-	endpoint, targetURL := p.resolveTargetURL(r.URL)
+	_, modelConfig, targetURL := p.resolveTargetURL(r.URL)
 	if targetURL == nil {
-		http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		http.Error(w, "Not Found", http.StatusNotFound)
 		return
 	}
-
-	modelConfig := p.findModelForPath(endpoint, r.URL.Path)
 
 	targetPath := p.computeTargetPath(r.URL.Path, modelConfig)
 	targetURL.Path = targetPath

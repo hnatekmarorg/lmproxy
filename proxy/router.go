@@ -8,20 +8,28 @@ import (
 	"github.com/hnatekmarorg/lmproxy/config"
 )
 
-func (p *Proxy) resolveTargetURL(requestURL *url.URL) (*config.Endpoint, *url.URL) {
+func (p *Proxy) resolveTargetURL(requestURL *url.URL) (*config.Endpoint, *config.ModelConfig, *url.URL) {
 	if len(p.endpoints) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
-	endpoint := &p.endpoints[0]
-
-	targetURL, err := url.Parse(endpoint.Host)
-	if err != nil {
-		slog.Error("Invalid endpoint URL", "host", endpoint.Host, "error", err)
-		return nil, nil
+	// Search all endpoints for a matching model path
+	for i := range p.endpoints {
+		endpoint := &p.endpoints[i]
+		modelConfig := p.findModelForPath(endpoint, requestURL.Path)
+		if modelConfig != nil {
+			targetURL, err := url.Parse(endpoint.Host)
+			if err != nil {
+				slog.Error("Invalid endpoint URL", "host", endpoint.Host, "error", err)
+				continue // Try next endpoint
+			}
+			return endpoint, modelConfig, targetURL
+		}
 	}
 
-	return endpoint, targetURL
+	// No matching model found
+	slog.Warn("No matching model found for path", "path", requestURL.Path)
+	return nil, nil, nil
 }
 
 func (p *Proxy) findModelForPath(endpoint *config.Endpoint, path string) *config.ModelConfig {

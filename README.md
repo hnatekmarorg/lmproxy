@@ -14,13 +14,23 @@ A lightweight HTTP proxy server for routing requests to multiple LLM endpoints w
 
 ```bash
 # Build from source
-go build -o llmproxy main.go
+go build -o lmproxy main.go
+```
+
+### Docker
+
+```bash
+# Build the Docker image
+docker build -t lmproxy .
+
+# Run the container
+docker run -v /path/to/config.yaml:/config.yaml lmproxy /config.yaml
 ```
 
 ## Usage
 
 ```bash
-./llmproxy config.yaml
+./lmproxy config.yaml
 ```
 
 The proxy requires a configuration file path as a command-line argument.
@@ -115,7 +125,7 @@ If no specific path is provided in the request, the proxy defaults to `/v1/chat/
 ├── util/
 │   └── util.go       # Utility functions
 ├── config.yaml       # Example configuration
-└── llmproxy          # Compiled binary
+└── lmproxy           # Compiled binary
 ```
 
 ## License

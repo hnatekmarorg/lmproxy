@@ -24,7 +24,7 @@ func streamSSE(w http.ResponseWriter, responseBody io.ReadCloser) {
 		return
 	}
 
-	buf := make([]byte, 4096)
+	buf := make([]byte, 64*1024) // 64KB buffer for headroom
 	for {
 		n, err := responseBody.Read(buf)
 		if n > 0 {
