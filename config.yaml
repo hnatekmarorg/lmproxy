@@ -1,0 +1,31 @@
+endpoints:
+  - host: https://sota.hnatekmar.dev
+    models:
+      # Thinking mode - longer max_tokens for reasoning + response
+      - id: Qwen/Qwen3.5-122B-A10B-FP8-thinking
+        path: /qwen-coding-thinking
+        body:
+          model: Qwen/Qwen3.5-122B-A10B-FP8
+          temperature: 0.6
+          top_p: 0.95
+          top_k: 20
+          stream: true
+          repetition_penalty: 1.0
+        chat_template_kwargs:
+          enable_thinking: true
+          min_p: 0.0
+
+      - id: Qwen/Qwen3.5-122B-A10B-FP8-fast
+        path: /qwen-coding-fast
+        body:
+          model: Qwen/Qwen3.5-122B-A10B-FP8
+          temperature: 0.7
+          top_p: 0.8
+          top_k: 20
+          stream: true
+          presence_penalty: 0.0
+          frequency_penalty: 0.0
+          repetition_penalty: 1.0
+        chat_template_kwargs:
+          enable_thinking: false
+          min_p: 0.0
