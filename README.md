@@ -6,6 +6,8 @@
 
 > **Shift the burden of sampling parameters from clients to the proxy server.**
 
+A lightweight HTTP proxy for routing LLM requests that centralizes model configuration. Define `temperature`, `top_p`, `top_k`, `max_tokens` once in your server config—clients send clean, simple requests without any sampling parameters.
+
 ## Why This Exists
 
 **The problem:** Every client request needs to specify sampling parameters like `temperature`, `top_p`, `top_k`, `max_tokens`, etc. This creates:
@@ -61,6 +63,8 @@ curl -X POST http://proxy/coding/v1/chat/completions \
 
 ## Quick Start
 
+Get up and running in 5 minutes:
+
 1. **Build the binary**
 
    ```bash
@@ -88,6 +92,8 @@ curl -X POST http://proxy/coding/v1/chat/completions \
    ```bash
    ./lmproxy config.yaml
    ```
+
+That's it. Your proxy is now listening on `http://localhost:9090`.
 
 ## Basic Usage
 
