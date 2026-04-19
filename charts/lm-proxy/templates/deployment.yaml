@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lm-proxy.fullname" . }}
+  labels:
+    app: {{ include "lm-proxy.name" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "lm-proxy.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "lm-proxy.name" . }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["/etc/lmproxy/config.yaml"]
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/lmproxy
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "lm-proxy.fullname" . }}
