@@ -18,9 +18,30 @@ type Proxy struct {
 
 func NewProxy(cfg *config.Config) *Proxy {
 	timeout := time.Duration(cfg.Server.Timeout) * time.Second
+
+	// Use Transport with separate timeouts for connection vs. body read
+	// This allows long-running SSE streams while still timing out slow connections
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   10,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: timeout, // Timeout for getting response headers
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	// Create client with transport - no overall timeout to allow long streams
+	// The ResponseHeaderTimeout in transport handles initial connection timeout
+	client := &http.Client{
+		Transport: transport,
+		// Don't set Timeout here - it would kill long-running streams
+		// We only want to timeout the initial connection/headers, not the body read
+	}
+
 	return &Proxy{
 		endpoints:          cfg.Endpoints,
-		client:             &http.Client{Timeout: timeout},
+		client:             client,
 		maxRequestBodySize: cfg.Server.MaxRequestBodySize,
 		timeout:            timeout,
 	}

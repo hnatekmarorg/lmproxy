@@ -1,0 +1,51 @@
+[Unit]
+Description=LLM Proxy Server
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lmproxy
+Group=lmproxy
+
+# Working directory where config.yaml is located
+WorkingDirectory=/opt/lmproxy
+
+# Path to the binary and config file
+ExecStart=/opt/lmproxy/lmproxy /opt/lmproxy/config.yaml
+
+# Restart policy
+Restart=always
+RestartSec=5
+
+# Environment variables (optional)
+Environment="TZ=UTC"
+
+# Resource limits (adjust as needed)
+MemoryMax=4G
+# CPUQuota=200%  # Uncomment to limit to 2 cores, remove for unlimited
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/lmproxy/logs
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lmproxy
+
+# Verify binary and config exist before starting
+ExecStartPre=/bin/test -f /opt/lmproxy/lmproxy
+ExecStartPre=/bin/test -f /opt/lmproxy/config.yaml
+
+# Graceful shutdown timeout (must match server shutdown timeout in main.go)
+TimeoutStopSec=30
+
+# Optional: Add environment variables here
+# Environment="API_KEY=your_api_key"
+# Environment="TLS_CERT_PATH=/path/to/cert.pem"
+
+[Install]
+WantedBy=multi-user.target
