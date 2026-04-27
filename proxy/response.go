@@ -41,7 +41,8 @@ func streamSSE(w http.ResponseWriter, responseBody io.ReadCloser, requestID stri
 
 	// Phantom chunk to keep AI SDK watchdog happy
 	// Valid OpenAI chat.completion.chunk with empty delta - SDK parses it and resets timer
-	const phantomChunk = `data: {"id":"keepalive","object":"chat.completion.chunk","created":0,"model":"keepalive","choices":[{"index":0,"delta":{}}]}\n\n`
+	// Note: Using byte slice to ensure actual newlines, not escaped \n
+	phantomChunk := []byte("data: {\"id\":\"keepalive\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"keepalive\",\"choices\":[{\"index\":0,\"delta\":{}}]}\n\n")
 
 	// Start keepalive timer - send phantom chunks every 5 seconds
 	keepaliveTicker := time.NewTicker(5 * time.Second)
@@ -57,7 +58,7 @@ func streamSSE(w http.ResponseWriter, responseBody io.ReadCloser, requestID stri
 			select {
 			case <-keepaliveTicker.C:
 				// Send phantom chunk to reset AI SDK watchdog
-				w.Write([]byte(phantomChunk))
+				w.Write(phantomChunk)
 				flusher.Flush()
 			case <-done:
 				return
