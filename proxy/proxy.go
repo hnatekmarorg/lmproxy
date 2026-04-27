@@ -24,19 +24,19 @@ func NewProxy(cfg *config.Config) *Proxy {
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   10,
+		MaxIdleConnsPerHost:   100, // Increase for many concurrent streams
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: timeout, // Timeout for getting response headers
+		ResponseHeaderTimeout: timeout, // Timeout for getting response headers only
 		ExpectContinueTimeout: 1 * time.Second,
+		// Disable compression to pass through backend responses as-is
+		DisableCompression: true,
 	}
 
 	// Create client with transport - no overall timeout to allow long streams
 	// The ResponseHeaderTimeout in transport handles initial connection timeout
 	client := &http.Client{
 		Transport: transport,
-		// Don't set Timeout here - it would kill long-running streams
-		// We only want to timeout the initial connection/headers, not the body read
 	}
 
 	return &Proxy{

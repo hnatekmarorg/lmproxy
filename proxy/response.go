@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -29,6 +30,7 @@ func forwardResponseBody(w http.ResponseWriter, resp *http.Response, requestID s
 func streamSSE(w http.ResponseWriter, responseBody io.ReadCloser, requestID string, startTime time.Time) int64 {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		slog.Error("Response writer does not support flushing", "request_id", requestID)
 		bytesWritten, _ := io.Copy(w, responseBody)
 		return bytesWritten
 	}
@@ -38,13 +40,20 @@ func streamSSE(w http.ResponseWriter, responseBody io.ReadCloser, requestID stri
 	for {
 		n, err := responseBody.Read(buf)
 		if n > 0 {
-			w.Write(buf[:n])
+			_, writeErr := w.Write(buf[:n])
+			if writeErr != nil {
+				slog.Error("Error writing to client during SSE stream", "request_id", requestID, "error", writeErr)
+				break
+			}
 			flusher.Flush()
 			bytesWritten += int64(n)
 		}
 		if err != nil {
-			if err != io.EOF {
-				slog.Error("Error reading from backend during SSE stream", "request_id", requestID, "error", err)
+			if err == io.EOF {
+				slog.Debug("Stream ended normally (EOF)", "request_id", requestID, "bytes_written", bytesWritten)
+			} else {
+				// Log the specific error to help diagnose timeouts
+				slog.Error("Error reading from backend during SSE stream", "request_id", requestID, "error", err, "error_type", fmt.Sprintf("%T", err))
 			}
 			break
 		}
