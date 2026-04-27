@@ -38,6 +38,33 @@ func streamSSE(w http.ResponseWriter, responseBody io.ReadCloser, requestID stri
 	buf := make([]byte, 64*1024) // 64KB buffer for headroom
 	var bytesWritten int64
 	var lastLogTime = startTime
+
+	// Phantom chunk to keep AI SDK watchdog happy
+	// Valid OpenAI chat.completion.chunk with empty delta - SDK parses it and resets timer
+	const phantomChunk = `data: {"id":"keepalive","object":"chat.completion.chunk","created":0,"model":"keepalive","choices":[{"index":0,"delta":{}}]}\n\n`
+
+	// Start keepalive timer - send phantom chunks every 5 seconds
+	keepaliveTicker := time.NewTicker(5 * time.Second)
+	defer keepaliveTicker.Stop()
+
+	// Channel to signal completion
+	done := make(chan struct{})
+	defer close(done)
+
+	// Goroutine to send phantom chunks
+	go func() {
+		for {
+			select {
+			case <-keepaliveTicker.C:
+				// Send phantom chunk to reset AI SDK watchdog
+				w.Write([]byte(phantomChunk))
+				flusher.Flush()
+			case <-done:
+				return
+			}
+		}
+	}()
+
 	for {
 		n, err := responseBody.Read(buf)
 		if n > 0 {
