@@ -25,7 +25,7 @@ func NewProxy(cfg *config.Config) *Proxy {
 		Proxy:                 http.ProxyFromEnvironment,
 		MaxIdleConns:          100,
 		MaxIdleConnsPerHost:   100, // Increase for many concurrent streams
-		IdleConnTimeout:       90 * time.Second,
+		IdleConnTimeout:       0,   // Disable idle timeout - breaks long streams
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: timeout, // Timeout for getting response headers only
 		ExpectContinueTimeout: 1 * time.Second,

@@ -37,6 +37,7 @@ func streamSSE(w http.ResponseWriter, responseBody io.ReadCloser, requestID stri
 
 	buf := make([]byte, 64*1024) // 64KB buffer for headroom
 	var bytesWritten int64
+	var lastLogTime = startTime
 	for {
 		n, err := responseBody.Read(buf)
 		if n > 0 {
@@ -47,6 +48,12 @@ func streamSSE(w http.ResponseWriter, responseBody io.ReadCloser, requestID stri
 			}
 			flusher.Flush()
 			bytesWritten += int64(n)
+
+			// Log progress every 30 seconds for long streams
+			if time.Since(lastLogTime) > 30*time.Second {
+				slog.Debug("Stream in progress", "request_id", requestID, "bytes_written", bytesWritten, "duration_ms", time.Since(startTime).Milliseconds())
+				lastLogTime = time.Now()
+			}
 		}
 		if err != nil {
 			if err == io.EOF {
