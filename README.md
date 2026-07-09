@@ -1,7 +1,7 @@
 # LLM Proxy
 
 [![Go Version](https://img.shields.io/badge/Go-1.22%2B-blue)](https://go.dev/)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green)]()
 
 > **Shift the burden of sampling parameters from clients to the proxy server.**
 
@@ -359,4 +359,4 @@ Check your `max_tokens` and `max_request_body_size` settings. Long generations w
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT
