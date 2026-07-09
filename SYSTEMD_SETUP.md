@@ -1,9 +1,27 @@
-# Systemd Service Setup Guide for LLM Proxy
+# Systemd Service Setup Guide
+
+> Deploy LLM Proxy as a production-ready systemd service with automatic restart,
+> resource limits, and security hardening.
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [File Locations](#file-locations)
+- [Management Commands](#management-commands)
+- [Configuration Options](#configuration-options)
+- [Security Considerations](#security-considerations)
+- [Troubleshooting](#troubleshooting)
+- [Auto-Restart Behavior](#auto-restart-behavior)
+- [Updating the Proxy](#updating-the-proxy)
+- [Uninstall](#uninstall)
+- [Firewall Integration](#firewall-integration)
+
+---
 
 ## Quick Start
 
 ```bash
-# Deploy and start
+# Deploy and start (automated)
 ./deploy.sh
 
 # Or manual installation
