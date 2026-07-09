@@ -683,5 +683,7 @@ endpoints:
 
 ## See Also
 
-- [README.md](README.md) - Project overview and features
-- [config.yaml](config.yaml) - Example configuration file
+- [README.md](README.md) — Project overview, quick start, and usage examples
+- [SYSTEMD_SETUP.md](SYSTEMD_SETUP.md) — Systemd service deployment guide
+- [AGENTS.md](AGENTS.md) — AI-assisted development guidelines
+- [config.yaml](config.yaml) — Example configuration file
