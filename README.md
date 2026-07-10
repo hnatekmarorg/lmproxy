@@ -47,6 +47,7 @@ curl -X POST http://proxy/coding/v1/chat/completions \
 | **Sampling params** | Client must specify every time | Defined once in server config |
 | **Default parameters** | None | Per-model defaults (temperature, top_p, etc.) |
 | **Request merging** | Pass-through only | Auto-merges config + client request |
+| **Model discovery** | Manual URL configuration | `/v1/models` endpoint (OpenAI-compatible) |
 | **Configuration** | Hard-coded or env vars | YAML-based, human-readable |
 | **SSE streaming** | Often broken or requires workarounds | First-class support, works out of the box |
 | **Setup time** | Hours of coding | 5 minutes (build + config + run) |
@@ -60,6 +61,8 @@ curl -X POST http://proxy/coding/v1/chat/completions \
 - **Request body merging** - Auto-merge client requests with configured defaults
 - **SSE streaming support** - Full Server-Sent Events streaming
 - **Flexible path routing** - Map custom paths to different models
+- **OpenAI-compatible model discovery** - `GET /v1/models` returns all configured models
+- **Body-based routing** - Route requests by model ID (no path prefix needed)
 
 ## Quick Start
 
@@ -106,6 +109,29 @@ curl -X POST http://localhost:9090/my-model/v1/chat/completions \
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 ```
+
+### Model Discovery
+
+List all available models:
+
+```bash
+curl http://localhost:9090/v1/models
+```
+
+### Body-Based Routing
+
+For pathless models, send requests directly to `/v1/chat/completions` with the model ID in the body:
+
+```bash
+curl -X POST http://localhost:9090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "my-model",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
+This is compatible with the OpenAI API format, so you can use any OpenAI SDK directly.
 
 ## Configuration
 

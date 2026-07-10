@@ -9,6 +9,12 @@ logging:
   level: info  # debug, info, warn, error
   format: text # text or json
 
+# Optional top-level model definitions (visible via GET /v1/models)
+# models:
+#   - id: global-model
+#     body:
+#       temperature: 0.7
+
 endpoints:
   - host: https://your-llm-server.com
     models:

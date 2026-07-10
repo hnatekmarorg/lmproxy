@@ -20,7 +20,7 @@ Complete configuration documentation for the LLM Proxy server.
 
 ## Configuration File Structure
 
-The proxy uses a YAML configuration file with three main sections:
+The proxy uses a YAML configuration file with four main sections:
 
 ```yaml
 server:
@@ -28,13 +28,20 @@ server:
   host: "0.0.0.0"
   port: 9090
 
+# Optional global model definitions (available in /v1/models)
+models:
+  - id: "global-model"
+    path: "/global-path"
+    body:
+      temperature: 0.7
+
 endpoints:
   # Array of backend endpoint configurations
   - host: "https://your-llm-server.com"
     models:
       # Array of model configurations per endpoint
       - id: "model-id"
-        path: "/model-path"
+        path: "/model-path"    # Optional - omit for body-based routing
         body: {}
         chat_template_kwargs: {}
 
@@ -42,9 +49,6 @@ logging:
   # Logging configuration (optional)
   level: "info"
   format: "json"
-
-max_request_body_size: 10485760
-timeout: 30
 ```
 
 ---
@@ -152,7 +156,7 @@ The `models` array within each endpoint defines individual model routing configu
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `id` | string | **Yes** | - | Unique identifier for this model configuration |
-| `path` | string | **Yes** | - | URL path prefix for routing requests to this model |
+| `path` | string | No | - | URL path prefix for routing requests to this model. Omit for body-based routing (uses `model` field from request body) |
 | `body` | object | No | `{}` | Default request body parameters |
 | `extra_body` | object | No | `{}` | Additional request body parameters |
 | `chat_template_kwargs` | object | No | `{}` | Chat template rendering arguments |
@@ -188,14 +192,14 @@ models:
 
 #### `path`
 - **Type**: `string`
-- **Required**: **Yes**
-- **Description**: The URL path prefix used to route requests to this model.
-- **Format**: Must start with `/`
+- **Required**: No
+- **Description**: The URL path prefix used to route requests to this model. When set, requests to `{path}/v1/chat/completions` are routed to this model. When omitted, the model is still listed in `/v1/models` and can be used via body-based routing — the proxy reads the `model` field from the request body to determine routing.
+- **Format**: If set, must start with `/`
 - **Examples**:
   - `/qwen-coding`
   - `/llama-chat`
   - `/generate`
-- **Routing**: Requests to `POST {path}/v1/chat/completions` are routed to this model.
+- **Routing**: If `path` is set, path-prefix matching takes priority. If no path matches, the proxy falls back to body-based model ID routing.
 
 #### `body`
 - **Type**: `object` (key-value pairs)
@@ -229,6 +233,61 @@ models:
 - **Description**: Arguments passed to the chat template renderer.
 - **Use Case**: Template-specific parameters like `enable_thinking`, `min_p`, etc.
 - **Note**: These are typically processed by the proxy before forwarding.
+
+---
+
+## API Endpoints
+
+### `GET /v1/models`
+
+Returns a list of all configured models in OpenAI-compatible format. This allows OpenAI-compatible clients (e.g., OpenAI SDK, LangChain, etc.) to discover available models without manual configuration.
+
+**Response:**
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "coding-model",
+      "object": "model",
+      "created": 1690000000,
+      "owned_by": "proxy"
+    },
+    {
+      "id": "chat-model",
+      "object": "model",
+      "created": 1690000000,
+      "owned_by": "proxy"
+    }
+  ]
+}
+```
+
+Models are collected from:
+- The top-level `models` section (if defined)
+- All models across all configured endpoints (deduplicated by `id`)
+
+### Body-Based Routing (Pathless Models)
+
+When a model has no `path` configured, the proxy cannot route to it by URL prefix alone. Instead, it uses **body-based routing**:
+
+1. The client sends a `POST` request to any inference endpoint (e.g., `/v1/chat/completions`)
+2. The proxy reads the `model` field from the request body
+3. It matches the model ID against all configured models
+4. Routes the request to the appropriate backend endpoint
+
+This enables transparent proxy usage with standard OpenAI API clients:
+
+```bash
+# Client sends standard OpenAI format — proxy handles routing
+curl -X POST http://proxy:9090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "coding-model",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
 
 ---
 
@@ -435,7 +494,7 @@ Returned when the backend server is unreachable or returns an error.
 | `host` | Endpoint | Must be present and non-empty |
 | `models` | Endpoint | Must be present with at least one model |
 | `id` | Model | Must be present and unique |
-| `path` | Model | Must be present and start with `/` |
+| `path` | Model | Optional — if set, must start with `/` |
 
 ### URL Scheme Requirements
 
@@ -463,12 +522,10 @@ Endpoint `host` URLs must include a valid scheme:
 
 ### Path Validation
 
-Model paths must follow these rules:
+Model paths (when set) must follow these rules:
 
 1. Must start with `/`
-2. Cannot be empty
-3. Should not contain special characters that break URLs
-4. Must be unique across all endpoints
+2. Should not contain special characters that break URLs
 
 **Valid Paths:**
 - `/qwen-coding`
@@ -477,7 +534,6 @@ Model paths must follow these rules:
 
 **Invalid Paths:**
 - `qwen-coding` (missing leading `/`)
-- `` (empty string)
 - `http://example.com` (full URL instead of path)
 
 ### Uniqueness Constraints
