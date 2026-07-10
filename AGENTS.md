@@ -36,9 +36,19 @@ This document provides guidelines for LLM agents working on the LLM Proxy codeba
 ├── config/
 │   └── models.go     # Configuration types, YAML unmarshaling, validation
 ├── proxy/
-│   └── config.go     # Request routing, body merging, forwarding logic
+│   ├── proxy.go      # Core proxy logic and request handling
+│   ├── router.go     # Path and body-based routing
+│   ├── request.go    # Request body preparation and merging
+│   ├── response.go   # SSE streaming and response forwarding
+│   ├── headers.go    # Header forwarding
+│   ├── models_handler.go  # /v1/models endpoint handler
+│   └── uuid.go       # Request ID generation
 ├── util/
-│   └── util.go       # Map merging, deep copy, utility functions
+│   └── map.go        # Map merging, deep copy, utility functions
+├── cmd/install/
+│   └── main.go       # Interactive setup wizard
+├── charts/
+│   └── lm-proxy/     # Kubernetes Helm chart
 ├── config.yaml       # Example configuration
 └── AGENTS.md         # This file - guidelines for AI agents
 ```
@@ -49,8 +59,12 @@ This document provides guidelines for LLM agents working on the LLM Proxy codeba
 |------|---------------|-------------|
 | `main.go` | Entry point, lifecycle | Don't change unless adding CLI flags |
 | `config/models.go` | Config parsing, types | Safe to extend with new config fields |
-| `proxy/config.go` | Core proxy logic | Be careful with routing/merging changes |
-| `util/util.go` | Shared utilities | Safe to add new helper functions |
+| `proxy/proxy.go` | Core proxy logic | Be careful with routing/merging changes |
+| `proxy/router.go` | Request routing | Path + body-based model routing |
+| `proxy/request.go` | Body preparation | Request body merging with defaults |
+| `proxy/response.go` | Response streaming | SSE and regular response forwarding |
+| `proxy/models_handler.go` | Model discovery | `/v1/models` endpoint handler |
+| `util/map.go` | Shared utilities | Map merging helpers |
 
 ---
 
@@ -232,23 +246,27 @@ func TestMergeBody(t *testing.T) {
 ```
 Client Request
     ↓
-Path Resolution (proxy/config.go)
+Path Resolution — Matches URL prefix to model path (proxy/router.go)
+    ↓ (if no match)
+Body-Based Resolution — Reads "model" field from POST body (proxy/router.go)
     ↓
-Config Lookup (config/models.go)
+Config Lookup — Finds endpoint + model config (config/models.go)
     ↓
-Body Merging (util/util.go)
+Body Merging — Merges config defaults with client request (util/map.go)
     ↓
-Backend Forwarding (proxy/config.go)
+Backend Forwarding — Proxies request to LLM server (proxy/proxy.go)
     ↓
-Response Streaming (proxy/config.go)
+Response Streaming — Streams response back to client (proxy/response.go)
 ```
 
 ### Key Design Decisions
 
-1. **Path-based routing** - Routes matched by URL prefix
-2. **Config merging** - Defaults merged with client request (client wins)
-3. **SSE support** - Streaming responses forwarded as-is
-4. **No auth layer** - Proxy doesn't add authentication
+1. **Path-based routing** — Routes matched by URL prefix (primary)
+2. **Body-based routing** — Fallback reads `model` field from POST body for pathless models
+3. **Config merging** — Defaults merged with client request (client wins)
+4. **SSE support** — Streaming responses forwarded as-is
+5. **Model discovery** — `GET /v1/models` returns all configured models in OpenAI format
+6. **No auth layer** — Proxy doesn't add authentication
 
 ### Things to Be Careful About
 
@@ -287,10 +305,11 @@ go build -o lmproxy main.go
 | Task | Read First |
 |------|------------|
 | Add config field | `config/models.go` |
-| Fix routing bug | `proxy/config.go` |
-| Add utility function | `util/util.go` |
+| Fix routing bug | `proxy/router.go` |
+| Add API endpoint | `proxy/proxy.go` + `proxy/models_handler.go` |
+| Add utility function | `util/map.go` |
 | Change CLI behavior | `main.go` |
-| Understand request flow | `proxy/config.go` + `main.go` |
+| Understand request flow | `proxy/proxy.go` + `proxy/router.go` + `main.go` |
 
 ---
 
