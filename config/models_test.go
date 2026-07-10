@@ -105,16 +105,6 @@ endpoints:
 `,
 		},
 		{
-			name: "empty model path",
-			content: `
-endpoints:
-  - host: https://example.com
-    models:
-      - id: test
-        path: ""
-`,
-		},
-		{
 			name: "path without leading slash",
 			content: `
 endpoints:

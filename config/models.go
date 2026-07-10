@@ -35,9 +35,10 @@ type HTTPConfig struct {
 }
 
 type Config struct {
-	Server    HTTPConfig   `yaml:"server"`
+	Server    HTTPConfig    `yaml:"server"`
 	Logging   LoggingConfig `yaml:"logging"`
-	Endpoints []Endpoint   `yaml:"endpoints"`
+	Models    []ModelConfig `yaml:"models,omitempty"`
+	Endpoints []Endpoint    `yaml:"endpoints"`
 }
 
 func Load(configPath string) (*Config, error) {
@@ -104,14 +105,53 @@ func Load(configPath string) (*Config, error) {
 				return nil, fmt.Errorf("duplicate model id %q", model.ID)
 			}
 			seenModelIDs[model.ID] = true
-			if model.Path == "" {
-				return nil, fmt.Errorf("endpoint %d, model %d (%s): path is required", i, j, model.ID)
-			}
-			if !strings.HasPrefix(model.Path, "/") {
+			if model.Path != "" && !strings.HasPrefix(model.Path, "/") {
 				return nil, fmt.Errorf("endpoint %d, model %d (%s): path must start with /", i, j, model.ID)
 			}
 		}
 	}
 
+	// Validate top-level models, but don't require path
+	for i, model := range config.Models {
+		if model.ID == "" {
+			return nil, fmt.Errorf("top-level model %d: id is required", i)
+		}
+		if seenModelIDs[model.ID] {
+			return nil, fmt.Errorf("duplicate model id %q", model.ID)
+		}
+		seenModelIDs[model.ID] = true
+		if model.Path != "" && !strings.HasPrefix(model.Path, "/") {
+			return nil, fmt.Errorf("top-level model %d (%s): path must start with /", i, model.ID)
+		}
+	}
+
 	return &config, nil
+}
+
+// AllEndpointModels returns all models from all endpoints, deduplicated by ID.
+// When a model ID appears in multiple endpoints, only the first occurrence is returned.
+func (c *Config) AllEndpointModels() []ModelConfig {
+	seen := make(map[string]bool)
+	var result []ModelConfig
+	for _, endpoint := range c.Endpoints {
+		for _, model := range endpoint.Models {
+			if !seen[model.ID] {
+				seen[model.ID] = true
+				result = append(result, model)
+			}
+		}
+	}
+	return result
+}
+
+// EndpointForModel returns the first endpoint that contains a model with the given ID.
+func (c *Config) EndpointForModel(modelID string) *Endpoint {
+	for i := range c.Endpoints {
+		for _, model := range c.Endpoints[i].Models {
+			if model.ID == modelID {
+				return &c.Endpoints[i]
+			}
+		}
+	}
+	return nil
 }

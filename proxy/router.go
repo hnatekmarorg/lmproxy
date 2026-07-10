@@ -1,7 +1,11 @@
 package proxy
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -57,4 +61,57 @@ func (p *Proxy) computeTargetPath(requestPath string, modelConfig *config.ModelC
 	}
 
 	return targetPath
+}
+
+// resolveTargetByModelID attempts to route a request by reading the "model" field
+// from the POST body and finding the matching endpoint and model config.
+// This is used when path-based routing fails (e.g., for models without a path).
+func (p *Proxy) resolveTargetByModelID(r *http.Request, requestID string) (*url.URL, *config.ModelConfig) {
+	if r.Method != "POST" {
+		return nil, nil
+	}
+
+	// Read just enough of the body to extract the model field
+	// Limit to a reasonable size to avoid buffering large requests
+	bodyBytes := make([]byte, 1024*64) // 64KB should be enough for model field
+	n, _ := r.Body.Read(bodyBytes)
+	if n == 0 {
+		return nil, nil
+	}
+	bodyBytes = bodyBytes[:n]
+
+	// We need to re-create the body since we read part of it
+	r.Body = io.NopCloser(io.MultiReader(
+		bytes.NewReader(bodyBytes),
+		r.Body,
+	))
+
+	// Parse the model field from the body
+	var partial struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(bodyBytes, &partial); err != nil || partial.Model == "" {
+		return nil, nil
+	}
+
+	slog.Debug("Body-based routing", "request_id", requestID, "model", partial.Model)
+
+	// Find the endpoint and model config
+	for i := range p.endpoints {
+		endpoint := &p.endpoints[i]
+		for j := range endpoint.Models {
+			if endpoint.Models[j].ID == partial.Model {
+				targetURL, err := url.Parse(endpoint.Host)
+				if err != nil {
+					slog.Error("Invalid endpoint URL", "request_id", requestID, "host", endpoint.Host, "error", err)
+					return nil, nil
+				}
+				slog.Debug("Route resolved by model ID", "request_id", requestID, "model", partial.Model, "endpoint", endpoint.Host)
+				return targetURL, &endpoint.Models[j]
+			}
+		}
+	}
+
+	slog.Warn("No matching model found for model ID", "request_id", requestID, "model", partial.Model)
+	return nil, nil
 }
