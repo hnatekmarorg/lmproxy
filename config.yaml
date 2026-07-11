@@ -1,14 +1,19 @@
 server:
+  # Proxy bind address (default: "0.0.0.0")
+  host: "0.0.0.0"
+  # Proxy listen port (default: 8080)
   port: 9090
-  # max_request_body_size: 104857600  # Optional: max request body size in bytes (default: 100MB)
+  # Maximum request body size in bytes (default: 100MB)
+  # max_request_body_size: 104857600
   # Set to 0 for no limit (not recommended for production)
-  # timeout: 3600  # Optional: request timeout in seconds (default: 3600 = 1 hour)
+  # Request timeout in seconds (default: 3600 = 1 hour)
+  # timeout: 3600
   # Supports 260K context + long generations with speed degradation
   # reachable_only: false  # When true, /v1/models only returns models available on upstream
 
 logging:
-  level: info  # debug, info, warn, error
-  format: text # text or json
+  level: info   # debug, info, warn, error
+  format: text  # text, json
 
 # Optional top-level model definitions (visible via GET /v1/models)
 # models:
@@ -17,34 +22,44 @@ logging:
 #       temperature: 0.7
 
 endpoints:
+  # --- Primary LLM Endpoint ---
   - host: https://your-llm-server.com
     models:
-      # Model variant 1 - with thinking/reasoning mode
-      - id: model-name-thinking
+      # Reasoning/thinking model variant
+      - id: model-thinking
         path: /model-thinking
         body:
           model: model-name
           temperature: 0.6
           top_p: 0.95
           top_k: 20
+          max_tokens: 8192
           stream: true
           repetition_penalty: 1.0
         chat_template_kwargs:
           enable_thinking: true
           min_p: 0.0
 
-      # Model variant 2 - fast response mode
-      - id: model-name-fast
+      # Fast-response model variant (no thinking)
+      - id: model-fast
         path: /model-fast
         body:
           model: model-name
           temperature: 0.7
           top_p: 0.8
           top_k: 20
+          max_tokens: 4096
           stream: true
-          presence_penalty: 0.0
-          frequency_penalty: 0.0
           repetition_penalty: 1.0
         chat_template_kwargs:
           enable_thinking: false
           min_p: 0.0
+
+  # --- Local Development Endpoint ---
+  # - host: http://localhost:8080
+  #   models:
+  #     - id: local-model
+  #       path: /local
+  #       body:
+  #         model: local-model-name
+  #         temperature: 0.5
