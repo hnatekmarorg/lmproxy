@@ -9,12 +9,32 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// PermissionConfig mirrors the OpenAI/vLLM permission object for model responses.
+type PermissionConfig struct {
+	ID                 string `yaml:"id" json:"id"`
+	Object             string `yaml:"object" json:"object"`
+	Created            int64  `yaml:"created" json:"created"`
+	AllowCreateEngine  bool   `yaml:"allow_create_engine" json:"allow_create_engine"`
+	AllowSampling      bool   `yaml:"allow_sampling" json:"allow_sampling"`
+	AllowLogprobs      bool   `yaml:"allow_logprobs" json:"allow_logprobs"`
+	AllowSearchIndices bool   `yaml:"allow_search_indices" json:"allow_search_indices"`
+	AllowView          bool   `yaml:"allow_view" json:"allow_view"`
+	AllowFineTuning    bool   `yaml:"allow_fine_tuning" json:"allow_fine_tuning"`
+	Organization       string `yaml:"organization" json:"organization"`
+	Group              *string `yaml:"group" json:"group"`
+	IsBlocking         bool   `yaml:"is_blocking" json:"is_blocking"`
+}
+
 type ModelConfig struct {
 	ID                 string                 `yaml:"id"`
 	Body               map[string]interface{} `yaml:"body"`
 	Path               string                 `yaml:"path"`
 	ExtraBody          map[string]interface{} `yaml:"extra_body"`
 	ChatTemplateKwargs map[string]interface{} `yaml:"chat_template_kwargs"`
+	MaxModelLen        int64                  `yaml:"max_model_len,omitempty" json:"max_model_len,omitempty"`
+	Root               string                 `yaml:"root,omitempty" json:"root,omitempty"`
+	Parent             *string                `yaml:"parent,omitempty" json:"parent,omitempty"`
+	Permission         []PermissionConfig     `yaml:"permission,omitempty" json:"permission,omitempty"`
 }
 
 type Endpoint struct {
