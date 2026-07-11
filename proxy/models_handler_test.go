@@ -318,15 +318,18 @@ func TestGetAllModels_Deduplication(t *testing.T) {
 
 func TestIsModelReachable_BodyModel(t *testing.T) {
 	p := &Proxy{}
-	reachableSet := map[string]bool{"upstream-a": true}
+	reachableMap := map[string]upstreamModel{
+		"upstream-a": {ID: "upstream-a", Root: "upstream-a", MaxModelLen: 4096},
+	}
 
 	// body.model matches
 	model := config.ModelConfig{
 		ID:   "model-a",
 		Body: map[string]interface{}{"model": "upstream-a"},
 	}
-	if !p.isModelReachable(model, reachableSet) {
-		t.Error("Expected model to be reachable via body.model")
+	matched := p.findUpstreamMatch(model, reachableMap)
+	if matched != "upstream-a" {
+		t.Errorf("Expected 'upstream-a', got %q", matched)
 	}
 
 	// body.model doesn't match
@@ -334,25 +337,30 @@ func TestIsModelReachable_BodyModel(t *testing.T) {
 		ID:   "model-b",
 		Body: map[string]interface{}{"model": "upstream-b"},
 	}
-	if p.isModelReachable(model2, reachableSet) {
-		t.Error("Expected model to not be reachable")
+	matched2 := p.findUpstreamMatch(model2, reachableMap)
+	if matched2 != "" {
+		t.Errorf("Expected no match, got %q", matched2)
 	}
 }
 
 func TestIsModelReachable_IDFallback(t *testing.T) {
 	p := &Proxy{}
-	reachableSet := map[string]bool{"model-a": true}
+	reachableMap := map[string]upstreamModel{
+		"model-a": {ID: "model-a"},
+	}
 
 	// No body.model, ID matches
 	model := config.ModelConfig{ID: "model-a"}
-	if !p.isModelReachable(model, reachableSet) {
-		t.Error("Expected model to be reachable via ID fallback")
+	matched := p.findUpstreamMatch(model, reachableMap)
+	if matched != "model-a" {
+		t.Errorf("Expected 'model-a', got %q", matched)
 	}
 
 	// No body.model, ID doesn't match
 	model2 := config.ModelConfig{ID: "model-b"}
-	if p.isModelReachable(model2, reachableSet) {
-		t.Error("Expected model to not be reachable")
+	matched2 := p.findUpstreamMatch(model2, reachableMap)
+	if matched2 != "" {
+		t.Errorf("Expected no match, got %q", matched2)
 	}
 }
 

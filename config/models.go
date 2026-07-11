@@ -52,7 +52,7 @@ type HTTPConfig struct {
 	Port               int    `yaml:"port"`
 	MaxRequestBodySize int    `yaml:"max_request_body_size"`
 	Timeout            int    `yaml:"timeout"`
-	ReachableOnly      bool   `yaml:"reachable_only"`
+	ReachableOnly      *bool  `yaml:"reachable_only,omitempty"`
 }
 
 type Config struct {
@@ -91,6 +91,12 @@ func Load(configPath string) (*Config, error) {
 
 	if config.Server.Timeout == 0 {
 		config.Server.Timeout = 3600
+	}
+
+	// Default reachable_only to true so /v1/models enriches with upstream metadata by default
+	if config.Server.ReachableOnly == nil {
+		defaultTrue := true
+		config.Server.ReachableOnly = &defaultTrue
 	}
 
 	// Default logging config

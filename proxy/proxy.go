@@ -41,13 +41,18 @@ func NewProxy(cfg *config.Config) *Proxy {
 		Transport: transport,
 	}
 
+	reachableOnly := false
+	if cfg.Server.ReachableOnly != nil {
+		reachableOnly = *cfg.Server.ReachableOnly
+	}
+
 	return &Proxy{
 		endpoints:          cfg.Endpoints,
 		topLevelModels:     cfg.Models,
 		client:             client,
 		maxRequestBodySize: cfg.Server.MaxRequestBodySize,
 		timeout:            timeout,
-		reachableOnly:      cfg.Server.ReachableOnly,
+		reachableOnly:      reachableOnly,
 	}
 }
 

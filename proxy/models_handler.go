@@ -44,14 +44,22 @@ type ListModelsResponse struct {
 	Data   []ModelResponse `json:"data"`
 }
 
-// upstreamListModelsResponse is used to parse upstream /v1/models responses.
-type upstreamListModelsResponse struct {
-	Object string           `json:"object"`
-	Data   []upstreamModel  `json:"data"`
+// upstreamModel mirrors the OpenAI/vLLM model object returned by upstream /v1/models endpoints.
+type upstreamModel struct {
+	ID          string               `json:"id"`
+	Object      string               `json:"object"`
+	Created     int64                `json:"created"`
+	OwnedBy     string               `json:"owned_by"`
+	Root        string               `json:"root,omitempty"`
+	Parent      *string              `json:"parent,omitempty"`
+	MaxModelLen int64                `json:"max_model_len,omitempty"`
+	Permission  []PermissionResponse `json:"permission,omitempty"`
 }
 
-type upstreamModel struct {
-	ID string `json:"id"`
+// upstreamListModelsResponse is used to parse upstream /v1/models responses.
+type upstreamListModelsResponse struct {
+	Object string          `json:"object"`
+	Data   []upstreamModel `json:"data"`
 }
 
 func (p *Proxy) handleListModels(w http.ResponseWriter, r *http.Request) {
@@ -80,35 +88,42 @@ func (p *Proxy) handleListModels(w http.ResponseWriter, r *http.Request) {
 
 // getReachableModels queries each upstream's /v1/models endpoint in real-time
 // and returns only proxy models that are actually available on their respective upstream.
+// It enriches the response with metadata from the upstream (/v1/models) response.
 func (p *Proxy) getReachableModels() []ModelResponse {
-	// Collect reachable model names per endpoint host
+	// Collect reachable models (with full metadata) per endpoint host
 	upstreamModels := p.queryAllUpstreams()
 
-	// Build a set of reachable proxy model identifiers (body.model or model ID)
-	reachableSet := make(map[string]bool)
+	// Build a map of reachable model identifier -> upstream model data
+	reachableMap := make(map[string]upstreamModel)
 	for _, models := range upstreamModels {
 		for _, m := range models {
-			reachableSet[m] = true
+			reachableMap[m.ID] = m
 		}
 	}
 
-	// Filter configured models by reachability
+	// Filter configured models by reachability, enriched with upstream metadata
 	seen := make(map[string]bool)
 	var result []ModelResponse
 	now := time.Now().Unix()
 
 	for _, model := range p.topLevelModels {
-		if !seen[model.ID] && p.isModelReachable(model, reachableSet) {
-			seen[model.ID] = true
-			result = append(result, modelConfigToResponse(model, now))
+		if !seen[model.ID] {
+			matchID := p.findUpstreamMatch(model, reachableMap)
+			if matchID != "" {
+				seen[model.ID] = true
+				result = append(result, modelConfigToResponse(model, now, reachableMap[matchID]))
+			}
 		}
 	}
 
 	for _, endpoint := range p.endpoints {
 		for _, model := range endpoint.Models {
-			if !seen[model.ID] && p.isModelReachable(model, reachableSet) {
-				seen[model.ID] = true
-				result = append(result, modelConfigToResponse(model, now))
+			if !seen[model.ID] {
+				matchID := p.findUpstreamMatch(model, reachableMap)
+				if matchID != "" {
+					seen[model.ID] = true
+					result = append(result, modelConfigToResponse(model, now, reachableMap[matchID]))
+				}
 			}
 		}
 	}
@@ -116,27 +131,31 @@ func (p *Proxy) getReachableModels() []ModelResponse {
 	return result
 }
 
-// isModelReachable checks if a proxy model is reachable on any upstream.
+// findUpstreamMatch checks if a proxy model matches any upstream model.
 // Matches on body["model"] first, falls back to model ID.
-func (p *Proxy) isModelReachable(model config.ModelConfig, reachableSet map[string]bool) bool {
+// Returns the matching upstream model ID, or empty string if no match.
+func (p *Proxy) findUpstreamMatch(model config.ModelConfig, reachableMap map[string]upstreamModel) string {
 	// Try body.model first
 	if model.Body != nil {
 		if modelVal, ok := model.Body["model"]; ok {
 			if modelStr, ok := modelVal.(string); ok && modelStr != "" {
-				if reachableSet[modelStr] {
-					return true
+				if _, exists := reachableMap[modelStr]; exists {
+					return modelStr
 				}
 			}
 		}
 	}
 	// Fall back to model ID
-	return reachableSet[model.ID]
+	if _, exists := reachableMap[model.ID]; exists {
+		return model.ID
+	}
+	return ""
 }
 
 // queryAllUpstreams queries each endpoint's /v1/models endpoint and returns
-// a map of host -> model IDs available on that upstream.
-func (p *Proxy) queryAllUpstreams() map[string][]string {
-	result := make(map[string][]string)
+// a map of host -> upstream model objects available on that upstream.
+func (p *Proxy) queryAllUpstreams() map[string][]upstreamModel {
+	result := make(map[string][]upstreamModel)
 
 	for _, endpoint := range p.endpoints {
 		modelsURL := endpoint.Host + "/v1/models"
@@ -171,12 +190,8 @@ func (p *Proxy) queryAllUpstreams() map[string][]string {
 			continue
 		}
 
-		var modelIDs []string
-		for _, m := range upstreamResp.Data {
-			modelIDs = append(modelIDs, m.ID)
-		}
-		result[endpoint.Host] = modelIDs
-		slog.Debug("Queried upstream models", "host", endpoint.Host, "model_count", len(modelIDs))
+		result[endpoint.Host] = upstreamResp.Data
+		slog.Debug("Queried upstream models", "host", endpoint.Host, "model_count", len(upstreamResp.Data))
 	}
 
 	return result
@@ -192,7 +207,7 @@ func (p *Proxy) getAllModels() []ModelResponse {
 	for _, model := range p.topLevelModels {
 		if !seen[model.ID] {
 			seen[model.ID] = true
-			result = append(result, modelConfigToResponse(model, now))
+			result = append(result, modelConfigToResponse(model, now, upstreamModel{}))
 		}
 	}
 
@@ -200,7 +215,7 @@ func (p *Proxy) getAllModels() []ModelResponse {
 		for _, model := range endpoint.Models {
 			if !seen[model.ID] {
 				seen[model.ID] = true
-				result = append(result, modelConfigToResponse(model, now))
+				result = append(result, modelConfigToResponse(model, now, upstreamModel{}))
 			}
 		}
 	}
@@ -208,7 +223,7 @@ func (p *Proxy) getAllModels() []ModelResponse {
 	return result
 }
 
-func modelConfigToResponse(model config.ModelConfig, now int64) ModelResponse {
+func modelConfigToResponse(model config.ModelConfig, now int64, upstream upstreamModel) ModelResponse {
 	resp := ModelResponse{
 		ID:      model.ID,
 		Object:  "model",
@@ -216,32 +231,45 @@ func modelConfigToResponse(model config.ModelConfig, now int64) ModelResponse {
 		OwnedBy: "proxy",
 	}
 
-	// Mirror vLLM response fields if configured
-	if model.MaxModelLen > 0 {
-		resp.MaxModelLen = model.MaxModelLen
-	}
-	if model.Root != "" {
-		resp.Root = model.Root
-	}
-	if model.Parent != nil {
-		resp.Parent = model.Parent
-	}
-	if len(model.Permission) > 0 {
-		resp.Permission = make([]PermissionResponse, len(model.Permission))
-		for i, p := range model.Permission {
-			resp.Permission[i] = PermissionResponse{
-				ID:                 p.ID,
-				Object:             p.Object,
-				Created:            p.Created,
-				AllowCreateEngine:  p.AllowCreateEngine,
-				AllowSampling:      p.AllowSampling,
-				AllowLogprobs:      p.AllowLogprobs,
-				AllowSearchIndices: p.AllowSearchIndices,
-				AllowView:          p.AllowView,
-				AllowFineTuning:    p.AllowFineTuning,
-				Organization:       p.Organization,
-				Group:              p.Group,
-				IsBlocking:         p.IsBlocking,
+	// Use upstream metadata when available (non-zero upstream passed).
+	// When upstream is the zero value (upstreamModel{}), fall back to config fields.
+	if upstream.ID != "" {
+		resp.Root = upstream.Root
+		resp.Parent = upstream.Parent
+		if upstream.MaxModelLen > 0 {
+			resp.MaxModelLen = upstream.MaxModelLen
+		}
+		if len(upstream.Permission) > 0 {
+			resp.Permission = upstream.Permission
+		}
+	} else {
+		// Fall back to config values (default mode)
+		if model.MaxModelLen > 0 {
+			resp.MaxModelLen = model.MaxModelLen
+		}
+		if model.Root != "" {
+			resp.Root = model.Root
+		}
+		if model.Parent != nil {
+			resp.Parent = model.Parent
+		}
+		if len(model.Permission) > 0 {
+			resp.Permission = make([]PermissionResponse, len(model.Permission))
+			for i, p := range model.Permission {
+				resp.Permission[i] = PermissionResponse{
+					ID:                 p.ID,
+					Object:             p.Object,
+					Created:            p.Created,
+					AllowCreateEngine:  p.AllowCreateEngine,
+					AllowSampling:      p.AllowSampling,
+					AllowLogprobs:      p.AllowLogprobs,
+					AllowSearchIndices: p.AllowSearchIndices,
+					AllowView:          p.AllowView,
+					AllowFineTuning:    p.AllowFineTuning,
+					Organization:       p.Organization,
+					Group:              p.Group,
+					IsBlocking:         p.IsBlocking,
+				}
 			}
 		}
 	}
