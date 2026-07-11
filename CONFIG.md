@@ -63,6 +63,9 @@ The `server` section configures the proxy's HTTP server binding.
 |-------|------|----------|---------|-------------|
 | `host` | string | No | `"0.0.0.0"` | Server bind address. Accepts IPv4, IPv6, or hostname. |
 | `port` | integer | No | `8080` | Server port number (1-65535). |
+| `max_request_body_size` | integer | No | `104857600` (100MB) | Maximum request body size in bytes. Set to `0` for no limit (not recommended for production). |
+| `timeout` | integer | No | `3600` (1 hour) | Request timeout in seconds. |
+| `reachable_only` | boolean | No | `false` | When `true`, the `GET /v1/models` endpoint queries each upstream's `/v1/models` in real-time and only returns models that are actually available on their respective upstream server. Default `false` preserves current behavior (returns all configured models). |
 
 ### Server Configuration Example
 

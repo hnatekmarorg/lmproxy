@@ -52,6 +52,7 @@ type HTTPConfig struct {
 	Port               int    `yaml:"port"`
 	MaxRequestBodySize int    `yaml:"max_request_body_size"`
 	Timeout            int    `yaml:"timeout"`
+	ReachableOnly      bool   `yaml:"reachable_only"`
 }
 
 type Config struct {

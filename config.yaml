@@ -4,6 +4,7 @@ server:
   # Set to 0 for no limit (not recommended for production)
   # timeout: 3600  # Optional: request timeout in seconds (default: 3600 = 1 hour)
   # Supports 260K context + long generations with speed degradation
+  # reachable_only: false  # When true, /v1/models only returns models available on upstream
 
 logging:
   level: info  # debug, info, warn, error

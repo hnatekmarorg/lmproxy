@@ -15,6 +15,7 @@ type Proxy struct {
 	client             *http.Client
 	maxRequestBodySize int
 	timeout            time.Duration
+	reachableOnly      bool
 }
 
 func NewProxy(cfg *config.Config) *Proxy {
@@ -46,6 +47,7 @@ func NewProxy(cfg *config.Config) *Proxy {
 		client:             client,
 		maxRequestBodySize: cfg.Server.MaxRequestBodySize,
 		timeout:            timeout,
+		reachableOnly:      cfg.Server.ReachableOnly,
 	}
 }
 
