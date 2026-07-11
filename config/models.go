@@ -9,12 +9,32 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// PermissionConfig mirrors the OpenAI/vLLM permission object for model responses.
+type PermissionConfig struct {
+	ID                 string `yaml:"id" json:"id"`
+	Object             string `yaml:"object" json:"object"`
+	Created            int64  `yaml:"created" json:"created"`
+	AllowCreateEngine  bool   `yaml:"allow_create_engine" json:"allow_create_engine"`
+	AllowSampling      bool   `yaml:"allow_sampling" json:"allow_sampling"`
+	AllowLogprobs      bool   `yaml:"allow_logprobs" json:"allow_logprobs"`
+	AllowSearchIndices bool   `yaml:"allow_search_indices" json:"allow_search_indices"`
+	AllowView          bool   `yaml:"allow_view" json:"allow_view"`
+	AllowFineTuning    bool   `yaml:"allow_fine_tuning" json:"allow_fine_tuning"`
+	Organization       string `yaml:"organization" json:"organization"`
+	Group              *string `yaml:"group" json:"group"`
+	IsBlocking         bool   `yaml:"is_blocking" json:"is_blocking"`
+}
+
 type ModelConfig struct {
 	ID                 string                 `yaml:"id"`
 	Body               map[string]interface{} `yaml:"body"`
 	Path               string                 `yaml:"path"`
 	ExtraBody          map[string]interface{} `yaml:"extra_body"`
 	ChatTemplateKwargs map[string]interface{} `yaml:"chat_template_kwargs"`
+	MaxModelLen        int64                  `yaml:"max_model_len,omitempty" json:"max_model_len,omitempty"`
+	Root               string                 `yaml:"root,omitempty" json:"root,omitempty"`
+	Parent             *string                `yaml:"parent,omitempty" json:"parent,omitempty"`
+	Permission         []PermissionConfig     `yaml:"permission,omitempty" json:"permission,omitempty"`
 }
 
 type Endpoint struct {
@@ -32,12 +52,14 @@ type HTTPConfig struct {
 	Port               int    `yaml:"port"`
 	MaxRequestBodySize int    `yaml:"max_request_body_size"`
 	Timeout            int    `yaml:"timeout"`
+	ReachableOnly      *bool  `yaml:"reachable_only,omitempty"`
 }
 
 type Config struct {
-	Server    HTTPConfig   `yaml:"server"`
+	Server    HTTPConfig    `yaml:"server"`
 	Logging   LoggingConfig `yaml:"logging"`
-	Endpoints []Endpoint   `yaml:"endpoints"`
+	Models    []ModelConfig `yaml:"models,omitempty"`
+	Endpoints []Endpoint    `yaml:"endpoints"`
 }
 
 func Load(configPath string) (*Config, error) {
@@ -69,6 +91,12 @@ func Load(configPath string) (*Config, error) {
 
 	if config.Server.Timeout == 0 {
 		config.Server.Timeout = 3600
+	}
+
+	// Default reachable_only to true so /v1/models enriches with upstream metadata by default
+	if config.Server.ReachableOnly == nil {
+		defaultTrue := true
+		config.Server.ReachableOnly = &defaultTrue
 	}
 
 	// Default logging config
@@ -104,14 +132,53 @@ func Load(configPath string) (*Config, error) {
 				return nil, fmt.Errorf("duplicate model id %q", model.ID)
 			}
 			seenModelIDs[model.ID] = true
-			if model.Path == "" {
-				return nil, fmt.Errorf("endpoint %d, model %d (%s): path is required", i, j, model.ID)
-			}
-			if !strings.HasPrefix(model.Path, "/") {
+			if model.Path != "" && !strings.HasPrefix(model.Path, "/") {
 				return nil, fmt.Errorf("endpoint %d, model %d (%s): path must start with /", i, j, model.ID)
 			}
 		}
 	}
 
+	// Validate top-level models, but don't require path
+	for i, model := range config.Models {
+		if model.ID == "" {
+			return nil, fmt.Errorf("top-level model %d: id is required", i)
+		}
+		if seenModelIDs[model.ID] {
+			return nil, fmt.Errorf("duplicate model id %q", model.ID)
+		}
+		seenModelIDs[model.ID] = true
+		if model.Path != "" && !strings.HasPrefix(model.Path, "/") {
+			return nil, fmt.Errorf("top-level model %d (%s): path must start with /", i, model.ID)
+		}
+	}
+
 	return &config, nil
+}
+
+// AllEndpointModels returns all models from all endpoints, deduplicated by ID.
+// When a model ID appears in multiple endpoints, only the first occurrence is returned.
+func (c *Config) AllEndpointModels() []ModelConfig {
+	seen := make(map[string]bool)
+	var result []ModelConfig
+	for _, endpoint := range c.Endpoints {
+		for _, model := range endpoint.Models {
+			if !seen[model.ID] {
+				seen[model.ID] = true
+				result = append(result, model)
+			}
+		}
+	}
+	return result
+}
+
+// EndpointForModel returns the first endpoint that contains a model with the given ID.
+func (c *Config) EndpointForModel(modelID string) *Endpoint {
+	for i := range c.Endpoints {
+		for _, model := range c.Endpoints[i].Models {
+			if model.ID == modelID {
+				return &c.Endpoints[i]
+			}
+		}
+	}
+	return nil
 }

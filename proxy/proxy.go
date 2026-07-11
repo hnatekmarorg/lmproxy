@@ -11,9 +11,11 @@ import (
 
 type Proxy struct {
 	endpoints          []config.Endpoint
+	topLevelModels     []config.ModelConfig
 	client             *http.Client
 	maxRequestBodySize int
 	timeout            time.Duration
+	reachableOnly      bool
 }
 
 func NewProxy(cfg *config.Config) *Proxy {
@@ -39,11 +41,18 @@ func NewProxy(cfg *config.Config) *Proxy {
 		Transport: transport,
 	}
 
+	reachableOnly := false
+	if cfg.Server.ReachableOnly != nil {
+		reachableOnly = *cfg.Server.ReachableOnly
+	}
+
 	return &Proxy{
 		endpoints:          cfg.Endpoints,
+		topLevelModels:     cfg.Models,
 		client:             client,
 		maxRequestBodySize: cfg.Server.MaxRequestBodySize,
 		timeout:            timeout,
+		reachableOnly:      reachableOnly,
 	}
 }
 
@@ -53,7 +62,18 @@ func (p *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("Request received", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "remote_addr", r.RemoteAddr)
 
+	// Handle /v1/models endpoint
+	if r.URL.Path == "/v1/models" || r.URL.Path == "/v1/models/" {
+		p.handleListModels(w, r)
+		slog.Info("Request completed", "request_id", requestID, "status", http.StatusOK, "duration_ms", time.Since(startTime).Milliseconds())
+		return
+	}
+
 	_, modelConfig, targetURL := p.resolveTargetURL(r.URL, requestID)
+	if targetURL == nil {
+		// Try body-based routing by model ID
+		targetURL, modelConfig = p.resolveTargetByModelID(r, requestID)
+	}
 	if targetURL == nil {
 		http.Error(w, "Not Found", http.StatusNotFound)
 		slog.Info("Request completed", "request_id", requestID, "status", http.StatusNotFound, "duration_ms", time.Since(startTime).Milliseconds(), "response_size", 0)
