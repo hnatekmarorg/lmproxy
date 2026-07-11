@@ -234,6 +234,62 @@ models:
 - **Use Case**: Template-specific parameters like `enable_thinking`, `min_p`, etc.
 - **Note**: These are typically processed by the proxy before forwarding.
 
+#### `max_model_len`
+- **Type**: `integer`
+- **Required**: No
+- **Description**: The maximum context length supported by this model, in tokens. When set, this value is included in the `GET /v1/models` response as `max_model_len`, mirroring the vLLM API response format.
+
+#### `root`
+- **Type**: `string`
+- **Required**: No
+- **Description**: The root model identifier from which this model is derived. When set, included in the `GET /v1/models` response as `root`, matching the OpenAI/vLLM model object format.
+
+#### `parent`
+- **Type**: `string` or `null`
+- **Required**: No
+- **Default**: `null`
+- **Description**: The parent model identifier. When set (including explicitly to `null`), included in the `GET /v1/models` response as `parent`, matching the OpenAI/vLLM model object format.
+
+#### `permission`
+- **Type**: `array` of permission objects
+- **Required**: No
+- **Description**: An array of permission objects that will be included in the `GET /v1/models` response, mirroring the vLLM /v1/models permission structure. Each object supports the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Permission identifier |
+| `object` | string | Object type (typically `"model_permission"`) |
+| `created` | integer | Unix timestamp of creation |
+| `allow_create_engine` | boolean | Allow engine creation |
+| `allow_sampling` | boolean | Allow sampling |
+| `allow_logprobs` | boolean | Allow log probabilities |
+| `allow_search_indices` | boolean | Allow search indices |
+| `allow_view` | boolean | Allow viewing |
+| `allow_fine_tuning` | boolean | Allow fine-tuning |
+| `organization` | string | Organization identifier (use `"*"` for all) |
+| `group` | string or null | Group identifier |
+| `is_blocking` | boolean | Is blocking |
+
+**Example:**
+```yaml
+- id: "deepseek-model"
+  path: "/deepseek"
+  body:
+    model: "deepseek-ai/DeepSeek-V4-Flash"
+  max_model_len: 1048576
+  root: "deepseek-ai/DeepSeek-V4-Flash"
+  parent: null
+  permission:
+    - id: "modelperm-abc123"
+      object: "model_permission"
+      created: 1690000000
+      allow_sampling: true
+      allow_logprobs: true
+      allow_view: true
+      organization: "*"
+      is_blocking: false
+```
+
 ---
 
 ## API Endpoints
@@ -252,7 +308,26 @@ Returns a list of all configured models in OpenAI-compatible format. This allows
       "id": "coding-model",
       "object": "model",
       "created": 1690000000,
-      "owned_by": "proxy"
+      "owned_by": "proxy",
+      "max_model_len": 1048576,
+      "root": "base-model",
+      "parent": null,
+      "permission": [
+        {
+          "id": "modelperm-abc123",
+          "object": "model_permission",
+          "created": 1690000000,
+          "allow_create_engine": false,
+          "allow_sampling": true,
+          "allow_logprobs": true,
+          "allow_search_indices": false,
+          "allow_view": true,
+          "allow_fine_tuning": false,
+          "organization": "*",
+          "group": null,
+          "is_blocking": false
+        }
+      ]
     },
     {
       "id": "chat-model",
@@ -495,6 +570,10 @@ Returned when the backend server is unreachable or returns an error.
 | `models` | Endpoint | Must be present with at least one model |
 | `id` | Model | Must be present and unique |
 | `path` | Model | Optional — if set, must start with `/` |
+| `max_model_len` | Model | Optional — integer, maximum model context length |
+| `root` | Model | Optional — string, root model identifier |
+| `parent` | Model | Optional — string or null, parent model identifier |
+| `permission` | Model | Optional — array of permission objects |
 
 ### URL Scheme Requirements
 
