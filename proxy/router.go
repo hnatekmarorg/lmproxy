@@ -68,6 +68,7 @@ func (p *Proxy) computeTargetPath(requestPath string, modelConfig *config.ModelC
 // This is used when path-based routing fails (e.g., for models without a path).
 func (p *Proxy) resolveTargetByModelID(r *http.Request, requestID string) (*url.URL, *config.ModelConfig) {
 	if r.Method != "POST" {
+		slog.Debug("Body-based routing skipped", "request_id", requestID, "reason", "not a POST request", "method", r.Method)
 		return nil, nil
 	}
 
@@ -76,6 +77,7 @@ func (p *Proxy) resolveTargetByModelID(r *http.Request, requestID string) (*url.
 	bodyBytes := make([]byte, 1024*64) // 64KB should be enough for model field
 	n, _ := r.Body.Read(bodyBytes)
 	if n == 0 {
+		slog.Warn("Body-based routing failed", "request_id", requestID, "reason", "empty request body")
 		return nil, nil
 	}
 	bodyBytes = bodyBytes[:n]
@@ -90,7 +92,12 @@ func (p *Proxy) resolveTargetByModelID(r *http.Request, requestID string) (*url.
 	var partial struct {
 		Model string `json:"model"`
 	}
-	if err := json.Unmarshal(bodyBytes, &partial); err != nil || partial.Model == "" {
+	if err := json.Unmarshal(bodyBytes, &partial); err != nil {
+		slog.Warn("Body-based routing failed", "request_id", requestID, "reason", "failed to parse request body as JSON", "error", err.Error())
+		return nil, nil
+	}
+	if partial.Model == "" {
+		slog.Warn("Body-based routing failed", "request_id", requestID, "reason", "no model field found in request body")
 		return nil, nil
 	}
 
