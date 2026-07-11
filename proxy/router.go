@@ -73,8 +73,8 @@ func (p *Proxy) resolveTargetByModelID(r *http.Request, requestID string) (*url.
 	}
 
 	// Read just enough of the body to extract the model field
-	// Limit to a reasonable size to avoid buffering large requests
-	bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 1024*64))
+	// Use the configured max request body size to avoid buffering large requests
+	bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, int64(p.maxRequestBodySize)))
 	if err != nil {
 		slog.Warn("Body-based routing failed", "request_id", requestID, "reason", "failed to read request body", "error", err)
 		return nil, nil
