@@ -1,7 +1,11 @@
 package proxy
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -57,4 +61,66 @@ func (p *Proxy) computeTargetPath(requestPath string, modelConfig *config.ModelC
 	}
 
 	return targetPath
+}
+
+// resolveTargetByModelID attempts to route a request by reading the "model" field
+// from the POST body and finding the matching endpoint and model config.
+// This is used when path-based routing fails (e.g., for models without a path).
+func (p *Proxy) resolveTargetByModelID(r *http.Request, requestID string) (*url.URL, *config.ModelConfig) {
+	if r.Method != "POST" {
+		slog.Debug("Body-based routing skipped", "request_id", requestID, "reason", "not a POST request", "method", r.Method)
+		return nil, nil
+	}
+
+	// Read just enough of the body to extract the model field
+	// Use the configured max request body size to avoid buffering large requests
+	bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, int64(p.maxRequestBodySize)))
+	if err != nil {
+		slog.Warn("Body-based routing failed", "request_id", requestID, "reason", "failed to read request body", "error", err)
+		return nil, nil
+	}
+	if len(bodyBytes) == 0 {
+		slog.Warn("Body-based routing failed", "request_id", requestID, "reason", "empty request body")
+		return nil, nil
+	}
+
+	// We need to re-create the body since we read part of it
+	r.Body = io.NopCloser(io.MultiReader(
+		bytes.NewReader(bodyBytes),
+		r.Body,
+	))
+
+	// Parse the model field from the body
+	var partial struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(bodyBytes, &partial); err != nil {
+		slog.Warn("Body-based routing failed", "request_id", requestID, "reason", "failed to parse request body as JSON", "error", err.Error())
+		return nil, nil
+	}
+	if partial.Model == "" {
+		slog.Warn("Body-based routing failed", "request_id", requestID, "reason", "no model field found in request body")
+		return nil, nil
+	}
+
+	slog.Debug("Body-based routing", "request_id", requestID, "model", partial.Model)
+
+	// Find the endpoint and model config
+	for i := range p.endpoints {
+		endpoint := &p.endpoints[i]
+		for j := range endpoint.Models {
+			if endpoint.Models[j].ID == partial.Model {
+				targetURL, err := url.Parse(endpoint.Host)
+				if err != nil {
+					slog.Error("Invalid endpoint URL", "request_id", requestID, "host", endpoint.Host, "error", err)
+					return nil, nil
+				}
+				slog.Debug("Route resolved by model ID", "request_id", requestID, "model", partial.Model, "endpoint", endpoint.Host)
+				return targetURL, &endpoint.Models[j]
+			}
+		}
+	}
+
+	slog.Warn("No matching model found for model ID", "request_id", requestID, "model", partial.Model)
+	return nil, nil
 }

@@ -32,7 +32,7 @@ A lightweight HTTP proxy for routing LLM requests that centralizes model configu
 - **Repetition** — Same parameters sent in every request
 - **Drift** — Different clients using different defaults
 - **Maintenance burden** — Changing a parameter means updating all clients
-- **Leaky abstraction** — Clients need to know model-specific details
+- **Leaky abstraction** -- Clients need to know model-specific details
 
 **The solution:** Define sampling parameters once in the proxy configuration. Clients send clean, simple requests. The proxy injects the right parameters based on which model they're using.
 
@@ -68,6 +68,7 @@ curl -X POST http://proxy/coding/v1/chat/completions \
 | **Sampling params** | Client must specify every time | Defined once in server config |
 | **Default parameters** | None | Per-model defaults (temperature, top_p, etc.) |
 | **Request merging** | Pass-through only | Auto-merges config + client request |
+| **Model discovery** | Manual URL configuration | `/v1/models` endpoint (OpenAI-compatible) |
 | **Configuration** | Hard-coded or env vars | YAML-based, human-readable |
 | **SSE streaming** | Often broken or requires workarounds | First-class support, works out of the box |
 | **Setup time** | Hours of coding | 5 minutes (build + config + run) |
@@ -143,6 +144,29 @@ curl -X POST http://localhost:9090/my-model/v1/chat/completions \
     "stream": true
   }'
 ```
+
+### Model Discovery
+
+List all available models via the OpenAI-compatible endpoint:
+
+```bash
+curl http://localhost:9090/v1/models
+```
+
+### Body-Based Routing
+
+For pathless models, send requests directly to `/v1/chat/completions` with the model ID in the body:
+
+```bash
+curl -X POST http://localhost:9090/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "my-model",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
+
+This is compatible with the OpenAI API format, so you can use any OpenAI SDK directly.
 
 ### Overriding Parameters
 
